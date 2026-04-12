@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 
+from graphify import DEFAULT_OUTPUT_DIR
+
 
 def _body_content(content: bytes) -> bytes:
     """Strip YAML frontmatter from Markdown content, returning only the body."""
@@ -33,25 +35,25 @@ def file_hash(path: Path) -> str:
     return h.hexdigest()
 
 
-def cache_dir(root: Path = Path(".")) -> Path:
-    """Returns graphify-out/cache/ - creates it if needed."""
-    d = Path(root) / "graphify-out" / "cache"
+def cache_dir(root: Path = Path("."), output_dir: str = DEFAULT_OUTPUT_DIR) -> Path:
+    """Returns <output_dir>/cache/ - creates it if needed."""
+    d = Path(root) / output_dir / "cache"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def load_cached(path: Path, root: Path = Path(".")) -> dict | None:
+def load_cached(path: Path, root: Path = Path("."), output_dir: str = DEFAULT_OUTPUT_DIR) -> dict | None:
     """Return cached extraction for this file if hash matches, else None.
 
     Cache key: SHA256 of file contents.
-    Cache value: stored as graphify-out/cache/{hash}.json
+    Cache value: stored as <output_dir>/cache/{hash}.json
     Returns None if no cache entry or file has changed.
     """
     try:
         h = file_hash(path)
     except OSError:
         return None
-    entry = cache_dir(root) / f"{h}.json"
+    entry = cache_dir(root, output_dir) / f"{h}.json"
     if not entry.exists():
         return None
     try:
@@ -60,14 +62,14 @@ def load_cached(path: Path, root: Path = Path(".")) -> dict | None:
         return None
 
 
-def save_cached(path: Path, result: dict, root: Path = Path(".")) -> None:
+def save_cached(path: Path, result: dict, root: Path = Path("."), output_dir: str = DEFAULT_OUTPUT_DIR) -> None:
     """Save extraction result for this file.
 
-    Stores as graphify-out/cache/{hash}.json where hash = SHA256 of current file contents.
+    Stores as <output_dir>/cache/{hash}.json where hash = SHA256 of current file contents.
     result should be a dict with 'nodes' and 'edges' lists.
     """
     h = file_hash(path)
-    entry = cache_dir(root) / f"{h}.json"
+    entry = cache_dir(root, output_dir) / f"{h}.json"
     tmp = entry.with_suffix(".tmp")
     try:
         tmp.write_text(json.dumps(result), encoding="utf-8")
@@ -77,15 +79,15 @@ def save_cached(path: Path, result: dict, root: Path = Path(".")) -> None:
         raise
 
 
-def cached_files(root: Path = Path(".")) -> set[str]:
+def cached_files(root: Path = Path("."), output_dir: str = DEFAULT_OUTPUT_DIR) -> set[str]:
     """Return set of file paths that have a valid cache entry (hash still matches)."""
-    d = cache_dir(root)
+    d = cache_dir(root, output_dir)
     return {p.stem for p in d.glob("*.json")}
 
 
-def clear_cache(root: Path = Path(".")) -> None:
-    """Delete all graphify-out/cache/*.json files."""
-    d = cache_dir(root)
+def clear_cache(root: Path = Path("."), output_dir: str = DEFAULT_OUTPUT_DIR) -> None:
+    """Delete all <output_dir>/cache/*.json files."""
+    d = cache_dir(root, output_dir)
     for f in d.glob("*.json"):
         f.unlink()
 
@@ -93,6 +95,7 @@ def clear_cache(root: Path = Path(".")) -> None:
 def check_semantic_cache(
     files: list[str],
     root: Path = Path("."),
+    output_dir: str = DEFAULT_OUTPUT_DIR,
 ) -> tuple[list[dict], list[dict], list[dict], list[str]]:
     """Check semantic extraction cache for a list of absolute file paths.
 
@@ -105,7 +108,7 @@ def check_semantic_cache(
     uncached: list[str] = []
 
     for fpath in files:
-        result = load_cached(Path(fpath), root)
+        result = load_cached(Path(fpath), root, output_dir)
         if result is not None:
             cached_nodes.extend(result.get("nodes", []))
             cached_edges.extend(result.get("edges", []))
@@ -121,6 +124,7 @@ def save_semantic_cache(
     edges: list[dict],
     hyperedges: list[dict] | None = None,
     root: Path = Path("."),
+    output_dir: str = DEFAULT_OUTPUT_DIR,
 ) -> int:
     """Save semantic extraction results to cache, keyed by source_file.
 
@@ -149,6 +153,6 @@ def save_semantic_cache(
         if not p.is_absolute():
             p = Path(root) / p
         if p.exists():
-            save_cached(p, result, root)
+            save_cached(p, result, root, output_dir)
             saved += 1
     return saved

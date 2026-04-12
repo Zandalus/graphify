@@ -1,5 +1,7 @@
 """graphify - extract · build · cluster · analyze · report."""
 
+DEFAULT_OUTPUT_DIR = "graphify-out"
+
 
 def __getattr__(name):
     # Lazy imports so `graphify install` works before heavy deps are in place.

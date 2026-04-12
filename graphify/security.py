@@ -11,6 +11,8 @@ from pathlib import Path
 import ipaddress
 import socket
 
+from graphify import DEFAULT_OUTPUT_DIR
+
 _ALLOWED_SCHEMES = {"http", "https"}
 _MAX_FETCH_BYTES = 52_428_800   # 50 MB hard cap for binary downloads
 _MAX_TEXT_BYTES  = 10_485_760   # 10 MB hard cap for HTML / text
@@ -144,7 +146,7 @@ def safe_fetch_text(url: str, max_bytes: int = _MAX_TEXT_BYTES, timeout: int = 1
 def validate_graph_path(path: str | Path, base: Path | None = None) -> Path:
     """Resolve *path* and verify it stays inside *base*.
 
-    *base* defaults to the `graphify-out` directory relative to CWD.
+    *base* defaults to the output directory (DEFAULT_OUTPUT_DIR) relative to CWD.
     Also requires the base directory to exist, so a caller cannot
     trick graphify into reading files before any graph has been built.
 
@@ -153,7 +155,7 @@ def validate_graph_path(path: str | Path, base: Path | None = None) -> Path:
         FileNotFoundError - resolved path does not exist
     """
     if base is None:
-        base = Path("graphify-out").resolve()
+        base = Path(DEFAULT_OUTPUT_DIR).resolve()
 
     base = base.resolve()
     if not base.exists():
@@ -168,7 +170,7 @@ def validate_graph_path(path: str | Path, base: Path | None = None) -> Path:
     except ValueError:
         raise ValueError(
             f"Path {path!r} escapes the allowed directory {base}. "
-            "Only paths inside graphify-out/ are permitted."
+            f"Only paths inside {base}/ are permitted."
         )
 
     if not resolved.exists():

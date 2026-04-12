@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import networkx as nx
 from networkx.readwrite import json_graph
+from graphify import DEFAULT_OUTPUT_DIR
 
 
 _CHARS_PER_TOKEN = 4  # standard approximation
@@ -62,7 +63,7 @@ _SAMPLE_QUESTIONS = [
 
 
 def run_benchmark(
-    graph_path: str = "graphify-out/graph.json",
+    graph_path: str = f"{DEFAULT_OUTPUT_DIR}/graph.json",
     corpus_words: int | None = None,
     questions: list[str] | None = None,
 ) -> dict:

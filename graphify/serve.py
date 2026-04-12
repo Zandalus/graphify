@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 import networkx as nx
 from networkx.readwrite import json_graph
+from graphify import DEFAULT_OUTPUT_DIR
 from graphify.security import sanitize_label
 
 
@@ -108,7 +109,7 @@ def _find_node(G: nx.Graph, label: str) -> list[str]:
             if term in d.get("label", "").lower() or term == nid.lower()]
 
 
-def serve(graph_path: str = "graphify-out/graph.json") -> None:
+def serve(graph_path: str = f"{DEFAULT_OUTPUT_DIR}/graph.json") -> None:
     """Start the MCP server. Requires pip install mcp."""
     try:
         from mcp.server import Server
@@ -329,5 +330,5 @@ def serve(graph_path: str = "graphify-out/graph.json") -> None:
 
 
 if __name__ == "__main__":
-    graph_path = sys.argv[1] if len(sys.argv) > 1 else "graphify-out/graph.json"
+    graph_path = sys.argv[1] if len(sys.argv) > 1 else f"{DEFAULT_OUTPUT_DIR}/graph.json"
     serve(graph_path)

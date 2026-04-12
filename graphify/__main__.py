@@ -7,6 +7,8 @@ import shutil
 import sys
 from pathlib import Path
 
+from graphify import DEFAULT_OUTPUT_DIR
+
 try:
     from importlib.metadata import version as _pkg_version
     __version__ = _pkg_version("graphifyy")
@@ -100,12 +102,12 @@ _PLATFORM_CONFIG: dict[str, dict] = {
 }
 
 
-def install(platform: str = "claude") -> None:
+def install(platform: str = "claude", output_dir: str = DEFAULT_OUTPUT_DIR) -> None:
     if platform == "gemini":
-        gemini_install()
+        gemini_install(output_dir=output_dir)
         return
     if platform == "cursor":
-        _cursor_install()
+        _cursor_install(output_dir=output_dir)
         return
     if platform not in _PLATFORM_CONFIG:
         print(
@@ -122,7 +124,10 @@ def install(platform: str = "claude") -> None:
 
     skill_dst = Path.home() / cfg["skill_dst"]
     skill_dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(skill_src, skill_dst)
+    # Read skill template, resolve {{OUTPUT_DIR}} placeholder, write to destination
+    skill_content = skill_src.read_text(encoding="utf-8")
+    skill_content = skill_content.replace("{{OUTPUT_DIR}}", output_dir)
+    skill_dst.write_text(skill_content, encoding="utf-8")
     (skill_dst.parent / ".graphify_version").write_text(__version__, encoding="utf-8")
     print(f"  skill installed  ->  {skill_dst}")
 
@@ -156,7 +161,7 @@ This project has a graphify knowledge graph at graphify-out/.
 Rules:
 - Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
 - If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
-- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"` to keep the graph current
+- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'), output_dir='graphify-out')"` to keep the graph current
 """
 
 _CLAUDE_MD_MARKER = "## graphify"
@@ -171,7 +176,7 @@ This project has a graphify knowledge graph at graphify-out/.
 Rules:
 - Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
 - If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
-- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"` to keep the graph current
+- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'), output_dir='graphify-out')"` to keep the graph current
 """
 
 _AGENTS_MD_MARKER = "## graphify"
@@ -184,7 +189,7 @@ This project has a graphify knowledge graph at graphify-out/.
 Rules:
 - Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
 - If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
-- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"` to keep the graph current
+- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'), output_dir='graphify-out')"` to keep the graph current
 """
 
 _GEMINI_MD_MARKER = "## graphify"
@@ -204,36 +209,39 @@ _GEMINI_HOOK = {
 }
 
 
-def gemini_install(project_dir: Path | None = None) -> None:
+def gemini_install(project_dir: Path | None = None, output_dir: str = DEFAULT_OUTPUT_DIR) -> None:
     """Copy skill file to ~/.gemini/skills/graphify/, write GEMINI.md section, and install BeforeTool hook."""
     # Copy skill file to ~/.gemini/skills/graphify/SKILL.md
     skill_src = Path(__file__).parent / "skill.md"
     skill_dst = Path.home() / ".gemini" / "skills" / "graphify" / "SKILL.md"
     skill_dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy(skill_src, skill_dst)
+    skill_content = skill_src.read_text(encoding="utf-8")
+    skill_content = skill_content.replace("{{OUTPUT_DIR}}", output_dir)
+    skill_dst.write_text(skill_content, encoding="utf-8")
     (skill_dst.parent / ".graphify_version").write_text(__version__, encoding="utf-8")
     print(f"  skill installed  ->  {skill_dst}")
 
     target = (project_dir or Path(".")) / "GEMINI.md"
+    section = _GEMINI_MD_SECTION.replace("graphify-out", output_dir)
 
     if target.exists():
         content = target.read_text(encoding="utf-8")
         if _GEMINI_MD_MARKER in content:
             print("graphify already configured in GEMINI.md")
         else:
-            target.write_text(content.rstrip() + "\n\n" + _GEMINI_MD_SECTION, encoding="utf-8")
+            target.write_text(content.rstrip() + "\n\n" + section, encoding="utf-8")
             print(f"graphify section written to {target.resolve()}")
     else:
-        target.write_text(_GEMINI_MD_SECTION, encoding="utf-8")
+        target.write_text(section, encoding="utf-8")
         print(f"graphify section written to {target.resolve()}")
 
-    _install_gemini_hook(project_dir or Path("."))
+    _install_gemini_hook(project_dir or Path("."), output_dir=output_dir)
     print()
     print("Gemini CLI will now check the knowledge graph before answering")
     print("codebase questions and rebuild it after code changes.")
 
 
-def _install_gemini_hook(project_dir: Path) -> None:
+def _install_gemini_hook(project_dir: Path, output_dir: str = DEFAULT_OUTPUT_DIR) -> None:
     settings_path = project_dir / ".gemini" / "settings.json"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -242,7 +250,8 @@ def _install_gemini_hook(project_dir: Path) -> None:
         settings = {}
     before_tool = settings.setdefault("hooks", {}).setdefault("BeforeTool", [])
     settings["hooks"]["BeforeTool"] = [h for h in before_tool if "graphify" not in str(h)]
-    settings["hooks"]["BeforeTool"].append(_GEMINI_HOOK)
+    hook = json.loads(json.dumps(_GEMINI_HOOK).replace("graphify-out", output_dir))
+    settings["hooks"]["BeforeTool"].append(hook)
     settings_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
     print("  .gemini/settings.json  ->  BeforeTool hook registered")
 
@@ -309,25 +318,26 @@ This project has a graphify knowledge graph at graphify-out/.
 
 - Before answering architecture or codebase questions, read graphify-out/GRAPH_REPORT.md for god nodes and community structure
 - If graphify-out/wiki/index.md exists, navigate it instead of reading raw files
-- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'))"` to keep the graph current
+- After modifying code files in this session, run `python3 -c "from graphify.watch import _rebuild_code; from pathlib import Path; _rebuild_code(Path('.'), output_dir='graphify-out')"` to keep the graph current
 """
 
 
-def _cursor_install(project_dir: Path) -> None:
+def _cursor_install(project_dir: Path = Path("."), output_dir: str = DEFAULT_OUTPUT_DIR) -> None:
     """Write .cursor/rules/graphify.mdc with alwaysApply: true."""
     rule_path = (project_dir or Path(".")) / _CURSOR_RULE_PATH
     rule_path.parent.mkdir(parents=True, exist_ok=True)
     if rule_path.exists():
         print(f"graphify rule already exists at {rule_path} (no change)")
         return
-    rule_path.write_text(_CURSOR_RULE, encoding="utf-8")
+    rule_content = _CURSOR_RULE.replace("graphify-out", output_dir)
+    rule_path.write_text(rule_content, encoding="utf-8")
     print(f"graphify rule written to {rule_path.resolve()}")
     print()
     print("Cursor will now always include the knowledge graph context.")
     print("Run /graphify . first to build the graph if you haven't already.")
 
 
-def _cursor_uninstall(project_dir: Path) -> None:
+def _cursor_uninstall(project_dir: Path = Path(".")) -> None:
     """Remove .cursor/rules/graphify.mdc."""
     rule_path = (project_dir or Path(".")) / _CURSOR_RULE_PATH
     if not rule_path.exists():
@@ -368,11 +378,12 @@ _OPENCODE_PLUGIN_PATH = Path(".opencode") / "plugins" / "graphify.js"
 _OPENCODE_CONFIG_PATH = Path("opencode.json")
 
 
-def _install_opencode_plugin(project_dir: Path) -> None:
+def _install_opencode_plugin(project_dir: Path, output_dir: str = DEFAULT_OUTPUT_DIR) -> None:
     """Write graphify.js plugin and register it in opencode.json."""
     plugin_file = project_dir / _OPENCODE_PLUGIN_PATH
     plugin_file.parent.mkdir(parents=True, exist_ok=True)
-    plugin_file.write_text(_OPENCODE_PLUGIN_JS, encoding="utf-8")
+    plugin_content = _OPENCODE_PLUGIN_JS.replace("graphify-out", output_dir)
+    plugin_file.write_text(plugin_content, encoding="utf-8")
     print(f"  {_OPENCODE_PLUGIN_PATH}  ->  tool.execute.before hook written")
 
     config_file = project_dir / _OPENCODE_CONFIG_PATH
@@ -439,7 +450,7 @@ _CODEX_HOOK = {
 }
 
 
-def _install_codex_hook(project_dir: Path) -> None:
+def _install_codex_hook(project_dir: Path, output_dir: str = DEFAULT_OUTPUT_DIR) -> None:
     """Add graphify PreToolUse hook to .codex/hooks.json."""
     hooks_path = project_dir / ".codex" / "hooks.json"
     hooks_path.parent.mkdir(parents=True, exist_ok=True)
@@ -454,7 +465,8 @@ def _install_codex_hook(project_dir: Path) -> None:
 
     pre_tool = existing.setdefault("hooks", {}).setdefault("PreToolUse", [])
     existing["hooks"]["PreToolUse"] = [h for h in pre_tool if "graphify" not in str(h)]
-    existing["hooks"]["PreToolUse"].extend(_CODEX_HOOK["hooks"]["PreToolUse"])
+    codex_hook = json.loads(json.dumps(_CODEX_HOOK).replace("graphify-out", output_dir))
+    existing["hooks"]["PreToolUse"].extend(codex_hook["hooks"]["PreToolUse"])
     hooks_path.write_text(json.dumps(existing, indent=2), encoding="utf-8")
     print(f"  .codex/hooks.json  ->  PreToolUse hook registered")
 
@@ -475,25 +487,26 @@ def _uninstall_codex_hook(project_dir: Path) -> None:
     print(f"  .codex/hooks.json  ->  PreToolUse hook removed")
 
 
-def _agents_install(project_dir: Path, platform: str) -> None:
+def _agents_install(project_dir: Path, platform: str, output_dir: str = DEFAULT_OUTPUT_DIR) -> None:
     """Write the graphify section to the local AGENTS.md (Codex/OpenCode/OpenClaw)."""
     target = (project_dir or Path(".")) / "AGENTS.md"
+    section = _AGENTS_MD_SECTION.replace("graphify-out", output_dir)
 
     if target.exists():
         content = target.read_text(encoding="utf-8")
         if _AGENTS_MD_MARKER in content:
             print(f"graphify already configured in AGENTS.md")
         else:
-            target.write_text(content.rstrip() + "\n\n" + _AGENTS_MD_SECTION, encoding="utf-8")
+            target.write_text(content.rstrip() + "\n\n" + section, encoding="utf-8")
             print(f"graphify section written to {target.resolve()}")
     else:
-        target.write_text(_AGENTS_MD_SECTION, encoding="utf-8")
+        target.write_text(section, encoding="utf-8")
         print(f"graphify section written to {target.resolve()}")
 
     if platform == "codex":
-        _install_codex_hook(project_dir or Path("."))
+        _install_codex_hook(project_dir or Path("."), output_dir=output_dir)
     elif platform == "opencode":
-        _install_opencode_plugin(project_dir or Path("."))
+        _install_opencode_plugin(project_dir or Path("."), output_dir=output_dir)
 
     print()
     print(f"{platform.capitalize()} will now check the knowledge graph before answering")
@@ -533,31 +546,32 @@ def _agents_uninstall(project_dir: Path) -> None:
     _uninstall_opencode_plugin(project_dir or Path("."))
 
 
-def claude_install(project_dir: Path | None = None) -> None:
+def claude_install(project_dir: Path | None = None, output_dir: str = DEFAULT_OUTPUT_DIR) -> None:
     """Write the graphify section to the local CLAUDE.md."""
     target = (project_dir or Path(".")) / "CLAUDE.md"
+    section = _CLAUDE_MD_SECTION.replace("graphify-out", output_dir)
 
     if target.exists():
         content = target.read_text(encoding="utf-8")
         if _CLAUDE_MD_MARKER in content:
             print("graphify already configured in CLAUDE.md")
             return
-        new_content = content.rstrip() + "\n\n" + _CLAUDE_MD_SECTION
+        new_content = content.rstrip() + "\n\n" + section
     else:
-        new_content = _CLAUDE_MD_SECTION
+        new_content = section
 
     target.write_text(new_content, encoding="utf-8")
     print(f"graphify section written to {target.resolve()}")
 
     # Also write Claude Code PreToolUse hook to .claude/settings.json
-    _install_claude_hook(project_dir or Path("."))
+    _install_claude_hook(project_dir or Path("."), output_dir=output_dir)
 
     print()
     print("Claude Code will now check the knowledge graph before answering")
     print("codebase questions and rebuild it after code changes.")
 
 
-def _install_claude_hook(project_dir: Path) -> None:
+def _install_claude_hook(project_dir: Path, output_dir: str = DEFAULT_OUTPUT_DIR) -> None:
     """Add graphify PreToolUse hook to .claude/settings.json."""
     settings_path = project_dir / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -574,7 +588,8 @@ def _install_claude_hook(project_dir: Path) -> None:
     pre_tool = hooks.setdefault("PreToolUse", [])
 
     hooks["PreToolUse"] = [h for h in pre_tool if not (h.get("matcher") == "Glob|Grep" and "graphify" in str(h))]
-    hooks["PreToolUse"].append(_SETTINGS_HOOK)
+    settings_hook = json.loads(json.dumps(_SETTINGS_HOOK).replace("graphify-out", output_dir))
+    hooks["PreToolUse"].append(settings_hook)
     settings_path.write_text(json.dumps(settings, indent=2), encoding="utf-8")
     print(f"  .claude/settings.json  ->  PreToolUse hook registered")
 
@@ -639,7 +654,7 @@ def main() -> None:
         print("Usage: graphify <command>")
         print()
         print("Commands:")
-        print("  install [--platform P]  copy skill to platform config dir (claude|windows|codex|opencode|aider|claw|droid|trae|trae-cn|gemini|cursor)")
+        print("  install [--platform P] [--output-dir DIR]  copy skill to platform config dir (claude|windows|codex|opencode|aider|claw|droid|trae|trae-cn|gemini|cursor)")
         print("  query \"<question>\"       BFS traversal of graph.json for a question")
         print("    --dfs                   use depth-first instead of breadth-first")
         print("    --budget N              cap output at N tokens (default 2000)")
@@ -679,11 +694,29 @@ def main() -> None:
         print()
         return
 
+    def _parse_output_dir(args: list[str]) -> tuple[str, list[str]]:
+        """Extract --output-dir value from args, return (output_dir, remaining_args)."""
+        out_dir = DEFAULT_OUTPUT_DIR
+        remaining: list[str] = []
+        i = 0
+        while i < len(args):
+            if args[i].startswith("--output-dir="):
+                out_dir = args[i].split("=", 1)[1]
+                i += 1
+            elif args[i] == "--output-dir" and i + 1 < len(args):
+                out_dir = args[i + 1]
+                i += 2
+            else:
+                remaining.append(args[i])
+                i += 1
+        return out_dir, remaining
+
     cmd = sys.argv[1]
     if cmd == "install":
         # Default to windows platform on Windows, claude elsewhere
         default_platform = "windows" if platform.system() == "Windows" else "claude"
         chosen_platform = default_platform
+        chosen_output_dir = DEFAULT_OUTPUT_DIR
         args = sys.argv[2:]
         i = 0
         while i < len(args):
@@ -693,40 +726,50 @@ def main() -> None:
             elif args[i] == "--platform" and i + 1 < len(args):
                 chosen_platform = args[i + 1]
                 i += 2
+            elif args[i].startswith("--output-dir="):
+                chosen_output_dir = args[i].split("=", 1)[1]
+                i += 1
+            elif args[i] == "--output-dir" and i + 1 < len(args):
+                chosen_output_dir = args[i + 1]
+                i += 2
             else:
                 i += 1
-        install(platform=chosen_platform)
+        install(platform=chosen_platform, output_dir=chosen_output_dir)
     elif cmd == "claude":
         subcmd = sys.argv[2] if len(sys.argv) > 2 else ""
+        out_dir, _ = _parse_output_dir(sys.argv[3:])
         if subcmd == "install":
-            claude_install()
+            claude_install(output_dir=out_dir)
         elif subcmd == "uninstall":
             claude_uninstall()
         else:
-            print("Usage: graphify claude [install|uninstall]", file=sys.stderr)
+            print("Usage: graphify claude [install|uninstall] [--output-dir DIR]", file=sys.stderr)
             sys.exit(1)
     elif cmd == "gemini":
         subcmd = sys.argv[2] if len(sys.argv) > 2 else ""
+        out_dir, _ = _parse_output_dir(sys.argv[3:])
         if subcmd == "install":
-            gemini_install()
+            gemini_install(output_dir=out_dir)
         elif subcmd == "uninstall":
             gemini_uninstall()
         else:
-            print("Usage: graphify gemini [install|uninstall]", file=sys.stderr)
+            print("Usage: graphify gemini [install|uninstall] [--output-dir DIR]", file=sys.stderr)
             sys.exit(1)
     elif cmd == "cursor":
         subcmd = sys.argv[2] if len(sys.argv) > 2 else ""
+        out_dir, _ = _parse_output_dir(sys.argv[3:])
         if subcmd == "install":
-            _cursor_install(Path("."))
+            _cursor_install(Path("."), output_dir=out_dir)
         elif subcmd == "uninstall":
             _cursor_uninstall(Path("."))
         else:
-            print("Usage: graphify cursor [install|uninstall]", file=sys.stderr)
+            print("Usage: graphify cursor [install|uninstall] [--output-dir DIR]", file=sys.stderr)
             sys.exit(1)
     elif cmd == "copilot":
         subcmd = sys.argv[2] if len(sys.argv) > 2 else ""
+        out_dir, _ = _parse_output_dir(sys.argv[3:])
         if subcmd == "install":
-            install(platform="copilot")
+            install(platform="copilot", output_dir=out_dir)
         elif subcmd == "uninstall":
             skill_dst = Path.home() / _PLATFORM_CONFIG["copilot"]["skill_dst"]
             removed = []
@@ -747,8 +790,9 @@ def main() -> None:
             sys.exit(1)
     elif cmd in ("aider", "codex", "opencode", "claw", "droid", "trae", "trae-cn"):
         subcmd = sys.argv[2] if len(sys.argv) > 2 else ""
+        out_dir, _ = _parse_output_dir(sys.argv[3:])
         if subcmd == "install":
-            _agents_install(Path("."), cmd)
+            _agents_install(Path("."), cmd, output_dir=out_dir)
         elif subcmd == "uninstall":
             _agents_uninstall(Path("."))
             if cmd == "codex":
@@ -759,8 +803,9 @@ def main() -> None:
     elif cmd == "hook":
         from graphify.hooks import install as hook_install, uninstall as hook_uninstall, status as hook_status
         subcmd = sys.argv[2] if len(sys.argv) > 2 else ""
+        out_dir, _ = _parse_output_dir(sys.argv[3:])
         if subcmd == "install":
-            print(hook_install(Path(".")))
+            print(hook_install(Path("."), output_dir=out_dir))
         elif subcmd == "uninstall":
             print(hook_uninstall(Path(".")))
         elif subcmd == "status":
@@ -778,7 +823,7 @@ def main() -> None:
         question = sys.argv[2]
         use_dfs = "--dfs" in sys.argv
         budget = 2000
-        graph_path = "graphify-out/graph.json"
+        graph_path = f"{DEFAULT_OUTPUT_DIR}/graph.json"
         args = sys.argv[3:]
         i = 0
         while i < len(args):
@@ -800,7 +845,7 @@ def main() -> None:
                 graph_path = args[i + 1]; i += 2
             else:
                 i += 1
-        # Load graph directly — validate_graph_path restricts to graphify-out/
+        # Load graph directly — validate_graph_path restricts to the output dir
         # so for custom --graph paths we resolve and load directly after existence check
         gp = Path(graph_path).resolve()
         if not gp.exists():
@@ -836,7 +881,7 @@ def main() -> None:
         p.add_argument("--answer", required=True)
         p.add_argument("--type", dest="query_type", default="query")
         p.add_argument("--nodes", nargs="*", default=[])
-        p.add_argument("--memory-dir", default="graphify-out/memory")
+        p.add_argument("--memory-dir", default=f"{DEFAULT_OUTPUT_DIR}/memory")
         opts = p.parse_args(sys.argv[2:])
         from graphify.ingest import save_query_result as _sqr
         out = _sqr(
@@ -849,7 +894,7 @@ def main() -> None:
         print(f"Saved to {out}")
     elif cmd == "benchmark":
         from graphify.benchmark import run_benchmark, print_benchmark
-        graph_path = sys.argv[2] if len(sys.argv) > 2 else "graphify-out/graph.json"
+        graph_path = sys.argv[2] if len(sys.argv) > 2 else f"{DEFAULT_OUTPUT_DIR}/graph.json"
         # Try to load corpus_words from detect output
         corpus_words = None
         detect_path = Path(".graphify_detect.json")

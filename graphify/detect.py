@@ -7,6 +7,8 @@ import re
 from enum import Enum
 from pathlib import Path
 
+from graphify import DEFAULT_OUTPUT_DIR
+
 
 class FileType(str, Enum):
     CODE = "code"
@@ -16,7 +18,7 @@ class FileType(str, Enum):
     VIDEO = "video"
 
 
-_MANIFEST_PATH = "graphify-out/manifest.json"
+_MANIFEST_PATH = f"{DEFAULT_OUTPUT_DIR}/manifest.json"
 
 CODE_EXTENSIONS = {'.py', '.ts', '.js', '.jsx', '.tsx', '.go', '.rs', '.java', '.cpp', '.cc', '.cxx', '.c', '.h', '.hpp', '.rb', '.swift', '.kt', '.kts', '.cs', '.scala', '.php', '.lua', '.toc', '.zig', '.ps1', '.ex', '.exs', '.m', '.mm', '.jl', '.vue', '.svelte'}
 DOC_EXTENSIONS = {'.md', '.txt', '.rst'}
@@ -316,7 +318,7 @@ def _is_ignored(path: Path, root: Path, patterns: list[str]) -> bool:
     return False
 
 
-def detect(root: Path, *, follow_symlinks: bool = False) -> dict:
+def detect(root: Path, *, follow_symlinks: bool = False, output_dir: str = DEFAULT_OUTPUT_DIR) -> dict:
     files: dict[FileType, list[str]] = {
         FileType.CODE: [],
         FileType.DOCUMENT: [],
@@ -329,8 +331,8 @@ def detect(root: Path, *, follow_symlinks: bool = False) -> dict:
     skipped_sensitive: list[str] = []
     ignore_patterns = _load_graphifyignore(root)
 
-    # Always include graphify-out/memory/ - query results filed back into the graph
-    memory_dir = root / "graphify-out" / "memory"
+    # Always include <output_dir>/memory/ - query results filed back into the graph
+    memory_dir = root / output_dir / "memory"
     scan_paths = [root]
     if memory_dir.exists():
         scan_paths.append(memory_dir)
@@ -362,7 +364,7 @@ def detect(root: Path, *, follow_symlinks: bool = False) -> dict:
                     seen.add(p)
                     all_files.append(p)
 
-    converted_dir = root / "graphify-out" / "converted"
+    converted_dir = root / output_dir / "converted"
 
     for p in all_files:
         # For memory dir files, skip hidden/noise filtering
@@ -445,13 +447,15 @@ def save_manifest(files: dict[str, list[str]], manifest_path: str = _MANIFEST_PA
     Path(manifest_path).write_text(json.dumps(manifest, indent=2), encoding="utf-8")
 
 
-def detect_incremental(root: Path, manifest_path: str = _MANIFEST_PATH) -> dict:
+def detect_incremental(root: Path, manifest_path: str | None = None, *, output_dir: str = DEFAULT_OUTPUT_DIR) -> dict:
     """Like detect(), but returns only new or modified files since the last run.
 
     Compares current file mtimes against the stored manifest.
     Use for --update mode: re-extract only what changed, merge into existing graph.
     """
-    full = detect(root)
+    if manifest_path is None:
+        manifest_path = f"{output_dir}/manifest.json"
+    full = detect(root, output_dir=output_dir)
     manifest = load_manifest(manifest_path)
 
     if not manifest:

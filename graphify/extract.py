@@ -8,6 +8,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Any
+from graphify import DEFAULT_OUTPUT_DIR
 from .cache import load_cached, save_cached
 
 
@@ -2589,7 +2590,7 @@ def _check_tree_sitter_version() -> None:
         )
 
 
-def extract(paths: list[Path]) -> dict:
+def extract(paths: list[Path], output_dir: str = DEFAULT_OUTPUT_DIR) -> dict:
     """Extract AST nodes and edges from a list of code files.
 
     Two-pass process:
@@ -2658,13 +2659,13 @@ def extract(paths: list[Path]) -> dict:
         extractor = _DISPATCH.get(path.suffix)
         if extractor is None:
             continue
-        cached = load_cached(path, root)
+        cached = load_cached(path, root, output_dir)
         if cached is not None:
             per_file.append(cached)
             continue
         result = extractor(path)
         if "error" not in result:
-            save_cached(path, result, root)
+            save_cached(path, result, root, output_dir)
         per_file.append(result)
     if total >= _PROGRESS_INTERVAL:
         print(f"  AST extraction: {total}/{total} files (100%)", flush=True)

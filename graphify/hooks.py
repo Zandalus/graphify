@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from graphify import DEFAULT_OUTPUT_DIR
+
 _HOOK_MARKER = "# graphify-hook-start"
 _HOOK_MARKER_END = "# graphify-hook-end"
 _CHECKOUT_MARKER = "# graphify-checkout-hook-start"
@@ -64,7 +66,7 @@ print(f'[graphify hook] {len(changed)} file(s) changed - rebuilding graph...')
 
 try:
     from graphify.watch import _rebuild_code
-    _rebuild_code(Path('.'))
+    _rebuild_code(Path('.'), output_dir='{{OUTPUT_DIR}}')
 except Exception as exc:
     print(f'[graphify hook] Rebuild failed: {exc}')
     sys.exit(1)
@@ -87,8 +89,8 @@ if [ "$BRANCH_SWITCH" != "1" ]; then
     exit 0
 fi
 
-# Only run if graphify-out/ exists (graph has been built before)
-if [ ! -d "graphify-out" ]; then
+# Only run if output dir exists (graph has been built before)
+if [ ! -d "{{OUTPUT_DIR}}" ]; then
     exit 0
 fi
 
@@ -99,7 +101,7 @@ from graphify.watch import _rebuild_code
 from pathlib import Path
 import sys
 try:
-    _rebuild_code(Path('.'))
+    _rebuild_code(Path('.'), output_dir='{{OUTPUT_DIR}}')
 except Exception as exc:
     print(f'[graphify] Rebuild failed: {exc}')
     sys.exit(1)
@@ -152,7 +154,7 @@ def _uninstall_hook(hooks_dir: Path, name: str, marker: str, marker_end: str) ->
     return f"graphify removed from {name} at {hook_path} (other hook content preserved)"
 
 
-def install(path: Path = Path(".")) -> str:
+def install(path: Path = Path("."), output_dir: str = DEFAULT_OUTPUT_DIR) -> str:
     """Install graphify post-commit and post-checkout hooks in the nearest git repo."""
     root = _git_root(path)
     if root is None:
@@ -161,8 +163,10 @@ def install(path: Path = Path(".")) -> str:
     hooks_dir = root / ".git" / "hooks"
     hooks_dir.mkdir(exist_ok=True)
 
-    commit_msg = _install_hook(hooks_dir, "post-commit", _HOOK_SCRIPT, _HOOK_MARKER)
-    checkout_msg = _install_hook(hooks_dir, "post-checkout", _CHECKOUT_SCRIPT, _CHECKOUT_MARKER)
+    hook_script = _HOOK_SCRIPT.replace("{{OUTPUT_DIR}}", output_dir)
+    checkout_script = _CHECKOUT_SCRIPT.replace("{{OUTPUT_DIR}}", output_dir)
+    commit_msg = _install_hook(hooks_dir, "post-commit", hook_script, _HOOK_MARKER)
+    checkout_msg = _install_hook(hooks_dir, "post-checkout", checkout_script, _CHECKOUT_MARKER)
 
     return f"post-commit: {commit_msg}\npost-checkout: {checkout_msg}"
 

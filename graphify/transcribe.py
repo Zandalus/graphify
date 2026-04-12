@@ -5,12 +5,13 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from graphify import DEFAULT_OUTPUT_DIR
 
 VIDEO_EXTENSIONS = {'.mp4', '.mov', '.webm', '.mkv', '.avi', '.m4v', '.mp3', '.wav', '.m4a', '.ogg'}
 URL_PREFIXES = ('http://', 'https://', 'www.')
 
 _DEFAULT_MODEL = "base"
-_TRANSCRIPTS_DIR = "graphify-out/transcripts"
+_TRANSCRIPTS_DIR = f"{DEFAULT_OUTPUT_DIR}/transcripts"
 _FALLBACK_PROMPT = "Use proper punctuation and paragraph breaks."
 
 
