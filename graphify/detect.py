@@ -18,8 +18,6 @@ class FileType(str, Enum):
     VIDEO = "video"
 
 
-_MANIFEST_PATH = f"{DEFAULT_OUTPUT_DIR}/manifest.json"
-
 CODE_EXTENSIONS = {'.py', '.ts', '.js', '.jsx', '.tsx', '.go', '.rs', '.java', '.cpp', '.cc', '.cxx', '.c', '.h', '.hpp', '.rb', '.swift', '.kt', '.kts', '.cs', '.scala', '.php', '.lua', '.toc', '.zig', '.ps1', '.ex', '.exs', '.m', '.mm', '.jl', '.vue', '.svelte'}
 DOC_EXTENSIONS = {'.md', '.txt', '.rst'}
 PAPER_EXTENSIONS = {'.pdf'}
@@ -426,16 +424,20 @@ def detect(root: Path, *, follow_symlinks: bool = False, output_dir: str = DEFAU
     }
 
 
-def load_manifest(manifest_path: str = _MANIFEST_PATH) -> dict[str, float]:
+def load_manifest(manifest_path: str | None = None, *, output_dir: str = DEFAULT_OUTPUT_DIR) -> dict[str, float]:
     """Load the file modification time manifest from a previous run."""
+    if manifest_path is None:
+        manifest_path = f"{output_dir}/manifest.json"
     try:
         return json.loads(Path(manifest_path).read_text(encoding="utf-8"))
     except Exception:
         return {}
 
 
-def save_manifest(files: dict[str, list[str]], manifest_path: str = _MANIFEST_PATH) -> None:
+def save_manifest(files: dict[str, list[str]], manifest_path: str | None = None, *, output_dir: str = DEFAULT_OUTPUT_DIR) -> None:
     """Save current file mtimes so the next --update run can diff against them."""
+    if manifest_path is None:
+        manifest_path = f"{output_dir}/manifest.json"
     manifest: dict[str, float] = {}
     for file_list in files.values():
         for f in file_list:

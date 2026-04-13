@@ -615,7 +615,7 @@ from graphify.detect import save_manifest
 
 # Save manifest for --update
 detect = json.loads(Path('.graphify_detect.json').read_text())
-save_manifest(detect['files'])
+save_manifest(detect['files'], output_dir='{{OUTPUT_DIR}}')
 
 # Update cumulative cost tracker
 extract = json.loads(Path('.graphify_extract.json').read_text())
@@ -686,7 +686,7 @@ import sys, json
 from graphify.detect import detect_incremental, save_manifest
 from pathlib import Path
 
-result = detect_incremental(Path('INPUT_PATH'))
+result = detect_incremental(Path('INPUT_PATH'), output_dir='{{OUTPUT_DIR}}')
 new_total = result.get('new_total', 0)
 print(json.dumps(result, indent=2))
 Path('.graphify_incremental.json').write_text(json.dumps(result))
